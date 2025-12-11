@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Job Application Tracker — Single File</title>
+  <style>
+    :root{--accent:#0b74de;--muted:#666}
+    body{font-family:Inter, system-ui, Arial;line-height:1.4;margin:0;background:#f5f7fb;color:#111}
+    .container{max-width:980px;margin:28px auto;padding:20px;background:#fff;border-radius:12px;box-shadow:0 6px 20px rgba(18,38,63,0.07)}
+    h1{margin:0 0 12px;font-size:20px}
+    form{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
+    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    input,select,textarea{width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px}
+    textarea{resize:vertical;min-height:48px}
+    .full{grid-column:1 / -1}
+    .btn{background:var(--accent);color:#fff;padding:9px 12px;border-radius:8px;border:0;cursor:pointer}
+    .btn.secondary{background:#fff;color:var(--accent);border:1px solid #dbe9ff}
+    .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+    table{width:100%;border-collapse:collapse;margin-top:8px}
+    th,td{padding:8px 10px;border-bottom:1px solid #eef2f7;text-align:left;font-size:13px}
+    th{background:#fbfdff;position:sticky;top:0}
+    .actions{display:flex;gap:6px}
+    .chip{display:inline-block;padding:6px 8px;border-radius:999px;font-size:12px;background:#eef6ff;color:#034ea2}
+    .muted{color:var(--muted);font-size:13px}
+    .small{font-size:12px}
+    .center{display:flex;gap:8px;justify-content:flex-end}
+    @media(max-width:720px){form{grid-template-columns:1fr} .center{justify-content:stretch}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Job Application Tracker</h1>
+    <div class="muted small">Add companies, roles and export to Excel. Data stored locally (localStorage) — export to XLSX when ready.</div>
+
+    <form id="appForm">
+      <div>
+        <label>Company name</label>
+        <input id="company" required />
+      </div>
+      <div>
+        <label>Role / Position</label>
+        <input id="role" />
+      </div>
+      <div>
+        <label>Date applied</label>
+        <input id="dateApplied" type="date" />
+      </div>
+      <div>
+        <label>Status</label>
+        <select id="status">
+          <option>Applied</option>
+          <option>Viewed</option>
+          <option>Shortlisted</option>
+          <option>Online test</option>
+          <option>Interview scheduled</option>
+          <option>Offer</option>
+          <option>Rejected</option>
+          <option>No response</option>
+        </select>
+      </div>
+      <div>
+        <label>Application link</label>
+        <input id="link" type="url" placeholder="https://" />
+      </div>
+      <div>
+        <label>HR / Recruiter contact</label>
+        <input id="contact" placeholder="name / email / phone" />
+      </div>
+      <div class="full">
+        <label>Notes</label>
+        <textarea id="notes" placeholder="anything you want to remember"></textarea>
+      </div>
+
+      <div class="full center">
+        <button class="btn" type="submit">Add / Save</button>
+        <button id="clearForm" type="button" class="btn secondary">Clear</button>
+      </div>
+    </form>
+
+    <div class="toolbar">
+      <button id="exportXLSX" class="btn">Export to Excel (.xlsx)</button>
+      <button id="exportCSV" class="btn secondary">Export CSV</button>
+      <button id="importFile" class="btn secondary">Import Excel (.xlsx)</button>
+      <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" style="display:none" />
+      <div style="flex:1"></div>
+      <button id="clearAll" class="btn secondary">Clear all data</button>
+    </div>
+
+    <table id="dataTable">
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Role</th>
+          <th>Date Applied</th>
+          <th>Status</th>
+          <th>Link</th>
+          <th>Contact</th>
+          <th>Notes</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+  </div>
+
+  <!-- SheetJS for Excel export/import -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script>
+    // Quick single-file job tracker with export to Excel
+    const STORAGE_KEY = 'job_trkr_v1'
+    let items = []
+    const form = document.getElementById('appForm')
+    const tbody = document.querySelector('#dataTable tbody')
+    const fileInput = document.getElementById('fileInput')
+
+    function load(){
+      try{
+        const raw = localStorage.getItem(STORAGE_KEY)
+        items = raw ? JSON.parse(raw) : []
+      }catch(e){ items = [] }
+      render()
+    }
+
+    function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(items)) }
+
+    function render(){
+      tbody.innerHTML = ''
+      items.forEach((it, idx)=>{
+        const tr = document.createElement('tr')
+        tr.innerHTML = `
+          <td>${escapeHTML(it.company)}</td>
+          <td>${escapeHTML(it.role||'')}</td>
+          <td>${escapeHTML(it.dateApplied||'')}</td>
+          <td><span class="chip">${escapeHTML(it.status||'')}</span></td>
+          <td>${it.link?`<a href="${escapeAttr(it.link)}" target="_blank">Link</a>`:''}</td>
+          <td>${escapeHTML(it.contact||'')}</td>
+          <td>${escapeHTML(it.notes||'')}</td>
+          <td class="actions">
+            <button data-edit="${idx}" class="btn secondary">Edit</button>
+            <button data-del="${idx}" class="btn secondary">Delete</button>
+          </td>
+        `
+        tbody.appendChild(tr)
+      })
+    }
+
+    function escapeHTML(s){ if(!s) return ''; return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c] }) }
+    function escapeAttr(s){ return (s||'').replace(/"/g,'\"') }
+
+    form.addEventListener('submit', e=>{
+      e.preventDefault()
+      const data = {
+        company: document.getElementById('company').value.trim(),
+        role: document.getElementById('role').value.trim(),
+        dateApplied: document.getElementById('dateApplied').value,
+        status: document.getElementById('status').value,
+        link: document.getElementById('link').value.trim(),
+        contact: document.getElementById('contact').value.trim(),
+        notes: document.getElementById('notes').value.trim(),
+      }
+      if(!data.company){ alert('Company name required'); return }
+
+      // If editing (we store an index on the form as dataset.editIndex)
+      const editIndex = form.dataset.editIndex
+      if(editIndex !== undefined){
+        if(editIndex === ''){
+          items.push(data)
+        } else {
+          items[Number(editIndex)] = data
+        }
+      } else {
+        items.push(data)
+      }
+      // clear edit marker
+      form.dataset.editIndex = ''
+      form.reset()
+      save()
+      render()
+    })
+
+    document.getElementById('clearForm').addEventListener('click', ()=>{ form.reset(); form.dataset.editIndex = '' })
+
+    tbody.addEventListener('click', e=>{
+      const edit = e.target.closest('[data-edit]')
+      const del = e.target.closest('[data-del]')
+      if(edit){
+        const idx = Number(edit.dataset.edit)
+        const it = items[idx]
+        document.getElementById('company').value = it.company
+        document.getElementById('role').value = it.role
+        document.getElementById('dateApplied').value = it.dateApplied
+        document.getElementById('status').value = it.status
+        document.getElementById('link').value = it.link
+        document.getElementById('contact').value = it.contact
+        document.getElementById('notes').value = it.notes
+        form.dataset.editIndex = String(idx)
+        window.scrollTo({top:0,behavior:'smooth'})
+      }
+      if(del){
+        const idx = Number(del.dataset.del)
+        if(confirm('Delete this entry?')){
+          items.splice(idx,1)
+          save(); render()
+        }
+      }
+    })
+
+    document.getElementById('clearAll').addEventListener('click', ()=>{
+      if(confirm('Clear all saved job applications?')){
+        items = []; save(); render()
+      }
+    })
+
+    // Export CSV
+    document.getElementById('exportCSV').addEventListener('click', ()=>{
+      if(!items.length){ alert('No data to export'); return }
+      const header = ['Company','Role','Date Applied','Status','Link','Contact','Notes']
+      const csvRows = [header.join(',')]
+      for(const r of items){
+        const row = [r.company,r.role,r.dateApplied,r.status,r.link,r.contact,r.notes].map(v=>`"${(v||'').replace(/"/g,'""')}"")
+        csvRows.push(row.join(','))
+      }
+      const csv = csvRows.join('\n')
+      const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'})
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = 'job_applications.csv'; a.click()
+      URL.revokeObjectURL(url)
+    })
+
+    // Export XLSX using SheetJS
+    document.getElementById('exportXLSX').addEventListener('click', ()=>{
+      if(!items.length){ alert('No data to export'); return }
+      // convert to worksheet
+      const ws_data = [[ 'Company','Role','Date Applied','Status','Link','Contact','Notes' ]]
+      items.forEach(r=> ws_data.push([r.company,r.role,r.dateApplied,r.status,r.link,r.contact,r.notes]))
+      const ws = XLSX.utils.aoa_to_sheet(ws_data)
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Applications')
+      XLSX.writeFile(wb, 'job_applications.xlsx')
+    })
+
+    // Import file (xlsx/csv)
+    document.getElementById('importFile').addEventListener('click', ()=> fileInput.click())
+    fileInput.addEventListener('change', e=>{
+      const f = e.target.files[0]
+      if(!f) return
+      const reader = new FileReader()
+      reader.onload = ev=>{
+        const data = ev.target.result
+        let wb
+        try{ wb = XLSX.read(data, {type:'binary'}) }catch(err){ alert('Could not read file'); return }
+        const first = wb.SheetNames[0]
+        const ws = wb.Sheets[first]
+        const arr = XLSX.utils.sheet_to_json(ws, {header:1})
+        // Expect header row in first line - map subsequent rows
+        const mapped = []
+        for(let i=1;i<arr.length;i++){
+          const r = arr[i]
+          if(!r || !r[0]) continue // skip empty
+          mapped.push({
+            company: r[0]||'', role: r[1]||'', dateApplied: r[2]||'', status: r[3]||'', link: r[4]||'', contact: r[5]||'', notes: r[6]||''
+          })
+        }
+        if(mapped.length){
+          if(confirm(`Import ${mapped.length} rows and append to existing? Press Cancel to replace everything.`)){
+            items = items.concat(mapped)
+          } else { items = mapped }
+          save(); render()
+        } else alert('No rows found to import')
+      }
+      reader.readAsBinaryString(f)
+      // reset
+      e.target.value = ''
+    })
+
+    // initialize
+    load()
+  </script>
+</body>
+</html>
